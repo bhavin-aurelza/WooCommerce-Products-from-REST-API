@@ -247,7 +247,6 @@ function createVariableProduct($woocommerce)
     ];
 
     return $woocommerce->post('products', $data);
-
 }
 
 
@@ -280,7 +279,6 @@ function addAttributes($woocommerce)
     ];
 
     return $woocommerce->put('products/24', $data);
-
 }
 
 
@@ -303,7 +301,6 @@ function addVariations($woocommerce)
     $createdVariation = $woocommerce->post('products/346/variations', $data);
     update_post_meta($createdVariation->id, 'min_max_rules', 'yes');
     update_post_meta($createdVariation->id, 'variation_group_of_quantity', '25');
-
 }
 
 
@@ -457,7 +454,6 @@ function allSimpleProducts($woocommerce)
 
             update_post_meta($createdPackVariation->id, 'min_max_rules', 'yes');
             update_post_meta($createdPackVariation->id, 'variation_group_of_quantity', $packageNumberOfItems);
-
         }
     }
     return "Hello";
@@ -470,47 +466,70 @@ function inserttoWooProduct()
 
     $query = "SELECT * FROM $productTable LIMIT 10";
     $APIdata = $wpdb->get_results($query, ARRAY_A);
+
     foreach ($APIdata as $product_data) {
-        if(empty($product_data['IsVariation']) && empty($product_data['IsSimple'])){
-            echo " Id ".$product_data['Code'];
+        if (empty($product_data['IsVariation']) && empty($product_data['IsSimple'])) {
+            $product = new WC_Product_Simple();
+            $product->set_name($product_data['ParentCode']); //Product Name
+            $product->set_regular_price($product_data['UnitPrice7']); //Product Name
+            $product->save();
 
-            // Create a new product
-            $product = new WC_Product();
+            $product_id = $product->get_id();
 
-            // Set product data
-            $product->set_name($product_data['ParentCode']); // Use ParentCode as the product name
-            $product->set_sku($product_data['Code']);
-            $product->set_description($product_data['Description']);
-            $product->set_regular_price($product_data['UnitPrice7IncludingVAT']);
-            $product->set_category_ids(array(wp_create_category($product_data['SubFamily'])));
-
-            // Insert the product into WooCommerce
-            $product_id = $product->save();
-
-            // Store as parent prod
-            $parent_products[$product_data['Code']] = $product_id;
-        } 
-        elseif (!empty($product_data['ParentCode']) && !empty($product_data['IsVariation'])) {
-            // This is a variation product
-            $parent_product_id = $parent_products[$product_data['ParentCode']];
-
-            if ($parent_product_id) {
-                // Create a variation
-                $variation = new WC_Product_Variation();
-                $variation->set_parent_id($parent_product_id);
-                $variation->set_sku($product_data['Code']);
-                $variation->set_description($product_data['Description']);
-                $variation->set_regular_price($product_data['UnitPrice7IncludingVAT']);
-
-                // Add variation attributes (if any)
-                // For example, color attribute
-                if (!empty($product_data['VariationDescription'])) {
-                    $variation->set_attributes(array('color' => $product_data['VariationDescription']));
-                }
-
-                // Insert the variation into WooCommerce
-                $variation->save();
+            // Check if the main category exists, and create it if it doesn't
+            $main_category_name = $product_data['Family']; // Replace with the actual main category name
+            if (!term_exists($main_category_name, 'product_cat')) {
+                wp_insert_term($main_category_name, 'product_cat');
             }
+
+            // Assign the main category to the product
+            $main_term_id = get_term_by('name', $main_category_name, 'product_cat')->term_id;
+            wp_set_post_terms($product_id, $main_term_id, 'product_cat');
+
+            // Check if the subcategory exists, and create it if it doesn't
+            $subcategory_name = $product_data['SubFamily']; // Replace with the actual subcategory name
+            if (!term_exists($subcategory_name, 'product_cat')) {
+                wp_insert_term($subcategory_name, 'product_cat', array('parent' => $main_term_id));
+            }
+
+            // Assign the subcategory to the product
+            $subcategory_term_id = get_term_by('name', $subcategory_name, 'product_cat')->term_id;
+            wp_set_post_terms($product_id, $subcategory_term_id, 'product_cat', true);
+
+
+            // Make sure to update the product after assigning the category
+            $product->save();
+        } 
+        else if(!empty($product_data['IsSimple'])){
+            $product = new WC_Product_Simple();
+            $product->set_name($product_data['ParentCode']); //Product Name
+            $product->set_regular_price($product_data['UnitPrice7']); //Product Name
+            $product->save();
+
+            $product_id = $product->get_id();
+
+            $main_category_name = $product_data['Family']; // Replace with the actual main category name
+            if (!term_exists($main_category_name, 'product_cat')) {
+                wp_insert_term($main_category_name, 'product_cat');
+            }
+
+            // Assign the main category to the product
+            $main_term_id = get_term_by('name', $main_category_name, 'product_cat')->term_id;
+            wp_set_post_terms($product_id, $main_term_id, 'product_cat');
+
+            // Check if the subcategory exists, and create it if it doesn't
+            $subcategory_name = $product_data['SubFamily']; // Replace with the actual subcategory name
+            if (!term_exists($subcategory_name, 'product_cat')) {
+                wp_insert_term($subcategory_name, 'product_cat', array('parent' => $main_term_id));
+            }
+
+            // Assign the subcategory to the product
+            $subcategory_term_id = get_term_by('name', $subcategory_name, 'product_cat')->term_id;
+            wp_set_post_terms($product_id, $subcategory_term_id, 'product_cat', true);
+
+
+            // Make sure to update the product after assigning the category
+            $product->save();
         }
     }
     echo "<pre>";
@@ -555,7 +574,7 @@ if (isset($_POST['inserttoWooProduct'])) {
 
 
 ob_start()
-    ?>
+?>
 <div class="wrap">
 
     <form method="post">
