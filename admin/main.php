@@ -164,6 +164,7 @@ function productsToDB()
         // Decode the JSON data
         $APIdata = json_decode($response, true);
 
+
         if (isset($APIdata['data']) && is_array($APIdata['data'])) {
             // Iterate over the "data" array
             foreach ($APIdata['data'] as $item) {
@@ -211,6 +212,10 @@ function productsToDB()
                 $wpdb->insert($productTable, $productData);
             }
         }
+        echo "<pre>";
+        print_r($APIdata);
+        echo "</pre>";
+        exit();
     }
 }
 
@@ -458,6 +463,61 @@ function allSimpleProducts($woocommerce)
     return "Hello";
 }
 
+function inserttoWooProduct()
+{
+    global $wpdb, $table_prefix;
+    $productTable = $table_prefix . "woorest_products";
+
+    $query = "SELECT * FROM $productTable LIMIT 10";
+    $APIdata = $wpdb->get_results($query, ARRAY_A);
+    foreach ($APIdata as $product_data) {
+        if(empty($product_data['IsVariation']) && empty($product_data['IsSimple'])){
+            echo " Id ".$product_data['Code'];
+
+            // Create a new product
+            $product = new WC_Product();
+
+            // Set product data
+            $product->set_name($product_data['ParentCode']); // Use ParentCode as the product name
+            $product->set_sku($product_data['Code']);
+            $product->set_description($product_data['Description']);
+            $product->set_regular_price($product_data['UnitPrice7IncludingVAT']);
+            $product->set_category_ids(array(wp_create_category($product_data['SubFamily'])));
+
+            // Insert the product into WooCommerce
+            $product_id = $product->save();
+
+            // Store as parent prod
+            $parent_products[$product_data['Code']] = $product_id;
+        } 
+        elseif (!empty($product_data['ParentCode']) && !empty($product_data['IsVariation'])) {
+            // This is a variation product
+            $parent_product_id = $parent_products[$product_data['ParentCode']];
+
+            if ($parent_product_id) {
+                // Create a variation
+                $variation = new WC_Product_Variation();
+                $variation->set_parent_id($parent_product_id);
+                $variation->set_sku($product_data['Code']);
+                $variation->set_description($product_data['Description']);
+                $variation->set_regular_price($product_data['UnitPrice7IncludingVAT']);
+
+                // Add variation attributes (if any)
+                // For example, color attribute
+                if (!empty($product_data['VariationDescription'])) {
+                    $variation->set_attributes(array('color' => $product_data['VariationDescription']));
+                }
+
+                // Insert the variation into WooCommerce
+                $variation->save();
+            }
+        }
+    }
+    echo "<pre>";
+    print_r($APIdata);
+    echo "</pre>";
+}
+
 // Check if the form is submitted and call the function
 if (isset($_POST['productToDB'])) {
     echo productsToDB();
@@ -488,6 +548,10 @@ if (isset($_POST['allSimpleProducts'])) {
     print "</pre>";
 }
 
+if (isset($_POST['inserttoWooProduct'])) {
+    inserttoWooProduct();
+}
+
 
 
 ob_start()
@@ -511,6 +575,10 @@ ob_start()
     </form>
     <form method="post">
         <button type="submit" name="allSimpleProducts">allSimpleProducts</button>
+    </form>
+
+    <form method="post">
+        <button type="submit" name="inserttoWooProduct">Insert to woocommerce product</button>
     </form>
 
 </div>
